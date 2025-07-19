@@ -1,0 +1,128 @@
+﻿@page "/"
+@using SixLabors.ImageSharp.PixelFormats
+@using TestInternAkBars.Models
+@using SixLabors.ImageSharp
+@using SixLabors.ImageSharp.Processing
+@inject IJSRuntime JSRuntime
+@rendermode InteractiveServer
+
+<h3>Median Filter Demo</h3>
+
+<InputFile OnChange="LoadImage" accept="image/*" />
+
+@if (originalImageUrl != null && filteredImageUrl != null)
+{
+    <div class="image-container">
+        <div class="image-wrapper">
+            <h4>Оригинальное изображение:</h4>
+            <img src="@originalImageUrl" alt="Original Image" />
+        </div>
+        <div class="image-wrapper">
+            <h4>Изображение после медианного фильтра:</h4>
+            <img src="@filteredImageUrl" alt="Filtered Image" />
+        </div>
+    </div>
+}
+else if (originalImageUrl != null)
+{
+    <div>
+        <h4>Оригинальное изображение:</h4>
+        <img src="@originalImageUrl" alt="Original Image" />
+    </div>
+}
+
+@code {
+    private Pixel[,] originalPixels;
+    private Pixel[,] filteredPixels;
+    private string originalImageUrl;
+    private string filteredImageUrl;
+
+    private async Task LoadImage(InputFileChangeEventArgs e)
+    {
+        try
+        {
+            Console.WriteLine("Файл выбран");
+
+            var imageFile = e.GetMultipleFiles().FirstOrDefault();
+            if (imageFile == null)
+            {
+                Console.WriteLine("Файл не выбран");
+                return;
+            }
+
+            Console.WriteLine($"Загружаем файл: {imageFile.Name}");
+
+            using var imageStream = imageFile.OpenReadStream();
+
+            using var image = await Image.LoadAsync(imageStream);
+            using var rgbaImage = image.CloneAs<Rgba32>();
+
+            Console.WriteLine("изображение загружено и преобразовано в Rgba32");
+
+            originalImageUrl = ConvertToBase64(rgbaImage);
+
+            Console.WriteLine("ориг. изображение преобразовано в Base64");
+
+            originalPixels = ConvertToPixelArray(rgbaImage);
+            Console.WriteLine($"пиксели изображения преобразованы: {originalPixels.GetLength(0)}x{originalPixels.GetLength(1)}");
+
+            filteredPixels = ImageFilter.ApplyMedianFilter(originalPixels);
+            Console.WriteLine("фильтр применён");
+
+            filteredImageUrl = ConvertToBase64(filteredPixels);
+            Console.WriteLine("изображение преобразовано в Base64");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Ошибка: {ex.Message}");
+        }
+    }
+
+    private Pixel[,] ConvertToPixelArray(Image<Rgba32> image)
+    {
+        int width = image.Width;
+        int height = image.Height;
+        var pixels = new Pixel[height, width];
+
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                var pixel = image[x, y];
+                pixels[y, x] = new Pixel(pixel.R, pixel.G, pixel.B);
+            }
+        }
+
+        return pixels;
+    }
+
+    private string ConvertToBase64(Pixel[,] pixels)
+    {
+        int height = pixels.GetLength(0);
+        int width = pixels.GetLength(1);
+
+        using var image = new Image<Rgba32>(width, height);
+
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                var pixel = pixels[y, x];
+                image[x, y] = new Rgba32(pixel.Red, pixel.Green, pixel.Blue, 255);
+            }
+        }
+
+        using var ms = new MemoryStream();
+        image.SaveAsPng(ms);
+
+        return $"data:image/png;base64,{Convert.ToBase64String(ms.ToArray())}";
+    }
+
+    private string ConvertToBase64(Image<Rgba32> image)
+    {
+        using var ms = new MemoryStream();
+        image.SaveAsPng(ms);
+
+        return $"data:image/png;base64,{Convert.ToBase64String(ms.ToArray())}";
+    }
+}
